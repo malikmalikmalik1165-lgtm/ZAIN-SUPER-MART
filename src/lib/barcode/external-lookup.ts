@@ -82,6 +82,7 @@ async function lookupOpenFoodFacts(barcode: string): Promise<ExternalProduct | n
 }
 
 // Provider 2: UPC Item DB (free, no key for basic lookup)
+// Note: Free tier has rate limits and sometimes returns unrelated products
 async function lookupUpcItemDb(barcode: string): Promise<ExternalProduct | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
@@ -101,8 +102,14 @@ async function lookupUpcItemDb(barcode: string): Promise<ExternalProduct | null>
     if (!json.items || json.items.length === 0) return null;
 
     const item = json.items[0];
+    // Filter out obviously unrelated results (common with free tier)
+    const title = item.title || "";
+    if (title.length > 100 || title.includes("ALFA ROMEO") || title.includes("BMW") || title.includes("Mercedes")) {
+      return null; // Obviously not a grocery product
+    }
+
     return {
-      name: item.title || null,
+      name: title || null,
       brand: item.brand || null,
       category: item.category || null,
       description: item.description || null,

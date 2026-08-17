@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { STORE, NAV_SECTIONS, DEVELOPER } from "@/lib/constants";
 import { NetworkStatus } from "@/components/network-status";
+import { PwaInstallButton } from "@/components/pwa-install";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -121,6 +122,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         {/* Bottom section */}
         <div className="border-t border-slate-700/50 px-4 py-3 space-y-2">
           <NetworkStatus />
+          <PwaInstallButton />
           <div className="text-center pt-1">
             <p className="text-[10px] text-slate-500">
               Developed by {DEVELOPER.name}
