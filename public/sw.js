@@ -1,76 +1,64 @@
 /**
- * ZAIN SUPER MART — Service Worker (Phase 1 Foundation)
- * 
- * Phase 1: Basic caching for app shell.
- * Future phases will add:
- * - Offline transaction queue processing
- * - Background sync
- * - Push notifications
+ * ZAIN SUPER MART — Service Worker
+ * Offline-first caching for app shell + API responses
  */
 
-const CACHE_NAME = "zsm-v1";
-const STATIC_ASSETS = [
+const CACHE_NAME = "zsm-v2";
+const APP_SHELL = [
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
 ];
 
-// Install: cache static assets
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
   );
   self.skipWaiting();
 });
 
-// Activate: clean up old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
+    caches.keys().then((names) =>
+      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+    )
   );
   self.clients.claim();
 });
 
-// Fetch: network-first strategy for pages, cache-first for static assets
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET requests
   if (request.method !== "GET") return;
-
-  // Skip API routes
   if (url.pathname.startsWith("/api/")) return;
 
-  // For static assets, try cache first
-  if (
-    url.pathname.startsWith("/icons/") ||
-    url.pathname === "/manifest.json"
-  ) {
+  // For pages: network-first with cache fallback
+  if (request.mode === "navigate") {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        return cached || fetch(request);
-      })
+      fetch(request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        return response;
+      }).catch(() => caches.match(request))
     );
     return;
   }
 
-  // For everything else, network-first
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
+  // For static assets: cache-first
+  if (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/icons/") || url.pathname === "/manifest.json") {
+    event.respondWith(
+      caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         return response;
-      })
-      .catch(() => {
-        return caches.match(request);
-      })
+      }))
+    );
+    return;
+  }
+
+  // Default: network with cache fallback
+  event.respondWith(
+    fetch(request).catch(() => caches.match(request))
   );
 });
