@@ -26,11 +26,16 @@ export function BarcodeScanner({ onProductFound, onCreateProduct }: BarcodeScann
       const res = await fetch(`/api/barcode/lookup?barcode=${encodeURIComponent(barcode.trim())}`);
       const json = await res.json();
       if (!res.ok) { setError(json.error || "Lookup failed"); return; }
-      if (json.found && json.data) {
+
+      // POS only cares about ZSM products (source === "zsm")
+      if (json.found && json.source === "zsm" && json.data) {
         if (!json.data.is_active) { setError(`${json.data.name} is inactive`); return; }
         onProductFound(json.data);
         setScanInput(""); setNotFound(null);
-      } else { setNotFound(barcode.trim()); }
+      } else {
+        // Product not in ZSM (may be external or not found at all)
+        setNotFound(barcode.trim());
+      }
     } catch { setError("Failed to look up barcode"); }
     finally { setScanning(false); inputRef.current?.focus(); }
   }, [onProductFound]);

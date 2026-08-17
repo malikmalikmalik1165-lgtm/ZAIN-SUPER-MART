@@ -507,8 +507,20 @@ export default function ProductsPage() {
 
           <BarcodeInput
             value={formData.barcode}
-            onChange={(val) => setFormData({ ...formData, barcode: val })}
+            onChange={(val: string) => setFormData({ ...formData, barcode: val })}
             generating={generatingBarcode}
+            onExternalProductFound={(ext) => {
+              // Auto-fill product form with external data
+              setFormData(prev => ({
+                ...prev,
+                name: ext.name || prev.name,
+                // Keep prices as 0 — user must set ZSM prices
+              }));
+              showToast("success", `Product found: ${ext.name} (${ext.source})`);
+            }}
+            onExistingProduct={(msg) => {
+              setFormError(msg);
+            }}
             onGenerate={async () => {
               setGeneratingBarcode(true);
               try {
