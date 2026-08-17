@@ -147,8 +147,11 @@ export function getStockStatusColor(status: StockStatus): string {
 // ============================================
 export const PAYMENT_METHODS = [
   { value: "cash", label: "Cash" },
-  { value: "credit", label: "Credit" },
+  { value: "credit", label: "Credit/Udhaar" },
   { value: "card", label: "Card" },
+  { value: "easypaisa", label: "Easypaisa" },
+  { value: "jazzcash", label: "JazzCash" },
+  { value: "bank", label: "Bank Transfer" },
   { value: "other", label: "Other" },
 ] as const;
 

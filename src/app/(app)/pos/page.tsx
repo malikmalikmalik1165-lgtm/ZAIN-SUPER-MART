@@ -439,7 +439,7 @@ export default function POSPage() {
 
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Payment Method</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {PAYMENT_METHODS.map((m) => (
                 <button
                   key={m.value}
@@ -447,14 +447,14 @@ export default function POSPage() {
                     setPaymentMethod(m.value);
                     if (m.value !== "cash") setAmountPaid(grandTotal);
                   }}
-                  className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-sm font-medium transition-colors ${
+                  className={`flex items-center justify-center gap-1 rounded-lg border p-2.5 text-xs font-medium transition-colors ${
                     paymentMethod === m.value
                       ? "border-emerald-500 bg-emerald-50 text-emerald-700"
                       : "border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  {m.value === "cash" && <Banknote className="h-4 w-4" />}
-                  {m.value === "card" && <CreditCard className="h-4 w-4" />}
+                  {m.value === "cash" && <Banknote className="h-3.5 w-3.5" />}
+                  {m.value === "card" && <CreditCard className="h-3.5 w-3.5" />}
                   {m.label}
                 </button>
               ))}
@@ -587,30 +587,43 @@ export default function POSPage() {
                 variant="secondary"
                 className="flex-1"
                 onClick={() => {
-                  const content = document.getElementById("receipt-content");
-                  if (content) {
-                    const win = window.open("", "_blank");
-                    if (win) {
-                      win.document.write(`<html><head><title>Receipt - ${completedSale.sale_number}</title><style>body{font-family:monospace;max-width:300px;margin:0 auto;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:4px 2px;text-align:left}th{font-size:11px}td{font-size:12px}.right{text-align:right}.center{text-align:center}.bold{font-weight:bold}.line{border-top:1px dashed #ccc;margin:8px 0}.title{text-align:center;font-size:16px;font-weight:bold}.sub{text-align:center;font-size:11px;color:#666}</style></head><body>`);
-                      win.document.write(`<p class="title">${STORE.name}</p>`);
-                      win.document.write(`<p class="sub">${STORE.address}<br>Ph: ${STORE.phone}</p>`);
-                      win.document.write(`<p class="sub">Invoice: ${completedSale.sale_number}<br>${new Date(completedSale.created_at).toLocaleString("en-PK")}</p>`);
-                      win.document.write(`<div class="line"></div>`);
-                      win.document.write(`<table><tr><th>Item</th><th class="center">Qty</th><th class="right">Price</th><th class="right">Total</th></tr>`);
-                      completedSale.items?.forEach((it) => {
-                        win.document.write(`<tr><td>${it.product_name}</td><td class="center">${it.quantity}</td><td class="right">Rs.${it.unit_price}</td><td class="right">Rs.${it.line_total}</td></tr>`);
-                      });
-                      win.document.write(`</table><div class="line"></div>`);
-                      win.document.write(`<p class="right">Subtotal: Rs.${completedSale.subtotal}</p>`);
-                      if (completedSale.discount > 0) win.document.write(`<p class="right">Discount: -Rs.${completedSale.discount}</p>`);
-                      win.document.write(`<p class="right bold">Total: Rs.${completedSale.total}</p>`);
-                      win.document.write(`<p class="right">Paid (${completedSale.payment_method}): Rs.${completedSale.amount_paid}</p>`);
-                      if (completedSale.change_amount > 0) win.document.write(`<p class="right">Change: Rs.${completedSale.change_amount}</p>`);
-                      win.document.write(`<div class="line"></div><p class="center sub">Thank you for shopping!</p>`);
-                      win.document.write(`</body></html>`);
-                      win.document.close();
-                      win.print();
-                    }
+                  const rw = localStorage.getItem("zsm_receipt_width") || "58";
+                  const maxW = rw === "80" ? "72mm" : "48mm";
+                  const win = window.open("", "_blank");
+                  if (win) {
+                    win.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>
+@page{size:${rw}mm auto;margin:0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Courier New',monospace;width:${maxW};margin:0 auto;padding:4mm 2mm;font-size:${rw==="80"?"12px":"10px"};color:#000}
+.c{text-align:center}.r{text-align:right}.b{font-weight:bold}
+.ln{border-top:1px dashed #000;margin:4px 0}
+table{width:100%;border-collapse:collapse}
+th,td{padding:2px 0;vertical-align:top}
+th{font-size:${rw==="80"?"10px":"9px"};text-align:left;border-bottom:1px solid #000}
+.sm{font-size:${rw==="80"?"10px":"8px"};color:#333}
+h2{font-size:${rw==="80"?"16px":"13px"};margin:2px 0}
+@media print{body{width:${maxW}}}
+</style></head><body>
+<div class="c"><h2>${STORE.name}</h2><p class="sm">${STORE.address}</p><p class="sm">Ph: ${STORE.phone}</p></div>
+<div class="ln"></div>
+<p class="sm">Invoice: <b>${completedSale.sale_number}</b></p>
+<p class="sm">${new Date(completedSale.created_at).toLocaleString("en-PK")}</p>
+<div class="ln"></div>
+<table><tr><th>Item</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amt</th></tr>`);
+                    completedSale.items?.forEach(it => {
+                      win.document.write(`<tr><td>${it.product_name}</td><td class="r">${it.quantity}</td><td class="r">${it.unit_price}</td><td class="r">${it.line_total}</td></tr>`);
+                    });
+                    win.document.write(`</table><div class="ln"></div>`);
+                    win.document.write(`<table><tr><td>Subtotal</td><td class="r">Rs.${completedSale.subtotal}</td></tr>`);
+                    if (completedSale.discount > 0) win.document.write(`<tr><td>Discount</td><td class="r">-Rs.${completedSale.discount}</td></tr>`);
+                    win.document.write(`<tr class="b"><td>TOTAL</td><td class="r">Rs.${completedSale.total}</td></tr>`);
+                    win.document.write(`<tr><td>Paid (${completedSale.payment_method})</td><td class="r">Rs.${completedSale.amount_paid}</td></tr>`);
+                    if (completedSale.change_amount > 0) win.document.write(`<tr><td>Change</td><td class="r">Rs.${completedSale.change_amount}</td></tr>`);
+                    win.document.write(`</table><div class="ln"></div>`);
+                    win.document.write(`<p class="c sm">Thank you for shopping!</p><p class="c sm">Developed by Malik Danial • 03180283104</p>`);
+                    win.document.write(`</body></html>`);
+                    win.document.close();
+                    setTimeout(() => win.print(), 300);
                   }
                 }}
               >

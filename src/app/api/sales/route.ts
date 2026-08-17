@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     if (!items || !Array.isArray(items) || items.length === 0) {
       errors.push("Cart is empty");
     }
-    if (!payment_method || !["cash", "card", "credit", "other"].includes(payment_method)) {
+    if (!payment_method || !["cash", "card", "credit", "easypaisa", "jazzcash", "bank", "other"].includes(payment_method)) {
       errors.push("Invalid payment method");
     }
     if (total === undefined || total <= 0) {
