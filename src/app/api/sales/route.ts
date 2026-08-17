@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     if (!items || !Array.isArray(items) || items.length === 0) {
       errors.push("Cart is empty");
     }
-    if (!payment_method || !["cash", "card", "other"].includes(payment_method)) {
+    if (!payment_method || !["cash", "card", "credit", "other"].includes(payment_method)) {
       errors.push("Invalid payment method");
     }
     if (total === undefined || total <= 0) {
@@ -157,10 +157,13 @@ export async function POST(request: NextRequest) {
     // === CREATE SALE ===
     const saleNumber = generateSaleNumber();
 
+    const customer_id = body.customer_id || null;
+
     const { data: sale, error: saleError } = await supabase
       .from("sales")
       .insert({
         sale_number: saleNumber,
+        customer_id,
         subtotal: serverSubtotal,
         discount: serverDiscount,
         total: serverTotal,
@@ -216,7 +219,7 @@ export async function POST(request: NextRequest) {
 // Helper: complete sale with items, stock deduction, movements
 async function completeSale(
   supabase: Awaited<ReturnType<typeof createServerSupabaseClient>> & object,
-  sale: { id: string; sale_number: string; total: number },
+  sale: { id: string; sale_number: string; total: number; customer_id?: string | null; payment_method?: string },
   items: { product_id: string; product_name: string; quantity: number; unit_price: number; discount: number; line_total: number }[],
   productMap: Map<string, { id: string; name: string; sale_price: number; stock_quantity: number; is_active: boolean }>,
   userId: string | null
@@ -272,6 +275,26 @@ async function completeSale(
 
     // Update local product map for subsequent items of same product
     product.stock_quantity = newStock;
+  }
+
+  // Handle credit sale - record customer transaction
+  if (sale.customer_id && sale.payment_method === "credit") {
+    await supabase.from("customer_transactions").insert({
+      customer_id: sale.customer_id,
+      type: "credit",
+      amount: sale.total,
+      sale_id: sale.id,
+      note: `Sale ${sale.sale_number}`,
+    });
+    // Update customer balance
+    const { data: cust } = await supabase.from("customers").select("balance").eq("id", sale.customer_id).single();
+    if (cust) {
+      await supabase.from("customers").update({
+        balance: parseFloat(String(cust.balance)) + sale.total,
+        total_credit: parseFloat(String(cust.balance)) + sale.total,
+        updated_at: new Date().toISOString(),
+      }).eq("id", sale.customer_id);
+    }
   }
 
   return NextResponse.json({

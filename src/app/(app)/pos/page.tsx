@@ -36,13 +36,18 @@ export default function POSPage() {
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [cartDiscount, setCartDiscount] = useState(0);
 
   // Payment
   const [showPayment, setShowPayment] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [amountPaid, setAmountPaid] = useState(0);
   const [processing, setProcessing] = useState(false);
+  const [discountType, setDiscountType] = useState<"fixed" | "percent">("fixed");
+  const [discountInput, setDiscountInput] = useState(0);
+
+  // Customer
+  const [customers, setCustomers] = useState<{ id: string; name: string; balance: number }[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState("");
 
   // Receipt
   const [showReceipt, setShowReceipt] = useState(false);
@@ -55,15 +60,15 @@ export default function POSPage() {
 
   // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + item.line_total, 0);
+  const calculatedDiscount = discountType === "percent" ? Math.min(subtotal * discountInput / 100, subtotal) : Math.min(discountInput, subtotal);
+  const cartDiscount = calculatedDiscount;
   const grandTotal = Math.max(0, subtotal - cartDiscount);
   const change = paymentMethod === "cash" ? Math.max(0, amountPaid - grandTotal) : 0;
 
-  // Fetch categories on mount
+  // Fetch categories + customers on mount
   useEffect(() => {
-    fetch("/api/categories?active=true")
-      .then((r) => r.json())
-      .then((json) => { if (json.data) setCategories(json.data); })
-      .catch(() => {});
+    fetch("/api/categories?active=true").then(r => r.json()).then(j => { if (j.data) setCategories(j.data); }).catch(() => {});
+    fetch("/api/customers").then(r => r.json()).then(j => { if (j.data) setCustomers(j.data); }).catch(() => {});
   }, []);
 
   // Search products
@@ -151,7 +156,7 @@ export default function POSPage() {
 
   const clearCart = () => {
     setCart([]);
-    setCartDiscount(0);
+    setDiscountInput(0);
   };
 
   // Open payment modal
@@ -167,6 +172,10 @@ export default function POSPage() {
   // Process sale
   const processSale = async () => {
     if (processing) return;
+    if (paymentMethod === "credit" && !selectedCustomer) {
+      showToast("error", "Customer is required for credit sale");
+      return;
+    }
     if (paymentMethod === "cash" && amountPaid < grandTotal) {
       showToast("error", "Amount paid is less than total");
       return;
@@ -187,8 +196,9 @@ export default function POSPage() {
         discount: cartDiscount,
         total: grandTotal,
         payment_method: paymentMethod,
-        amount_paid: paymentMethod === "cash" ? amountPaid : grandTotal,
+        amount_paid: paymentMethod === "cash" ? amountPaid : paymentMethod === "credit" ? 0 : grandTotal,
         change_amount: paymentMethod === "cash" ? change : 0,
+        customer_id: selectedCustomer || null,
       };
 
       const res = await fetch("/api/sales", {
@@ -204,7 +214,7 @@ export default function POSPage() {
       setShowPayment(false);
       setShowReceipt(true);
       setCart([]);
-      setCartDiscount(0);
+      setDiscountInput(0);
       showToast("success", "Sale completed successfully!");
 
       // Refresh product search to update stock
@@ -386,14 +396,22 @@ export default function POSPage() {
           </div>
           <div className="flex items-center justify-between text-sm text-slate-600">
             <span>Discount</span>
-            <input
-              type="number"
-              min="0"
-              max={subtotal}
-              value={cartDiscount}
-              onChange={(e) => setCartDiscount(Math.max(0, Math.min(subtotal, parseFloat(e.target.value) || 0)))}
-              className="w-24 text-right rounded border border-slate-200 px-2 py-1 text-sm focus:border-emerald-500 focus:outline-none"
-            />
+            <div className="flex items-center gap-1">
+              <select value={discountType} onChange={e => setDiscountType(e.target.value as "fixed" | "percent")} className="rounded border border-slate-200 px-1 py-1 text-xs">
+                <option value="fixed">Rs.</option>
+                <option value="percent">%</option>
+              </select>
+              <input type="number" min="0" max={discountType === "percent" ? 100 : subtotal} value={discountInput} onChange={e => setDiscountInput(parseFloat(e.target.value) || 0)} className="w-20 text-right rounded border border-slate-200 px-2 py-1 text-sm focus:border-emerald-500 focus:outline-none" />
+            </div>
+          </div>
+          {cartDiscount > 0 && <div className="flex justify-between text-sm text-red-500"><span>-Discount</span><span>-{formatPrice(cartDiscount)}</span></div>}
+          {/* Customer */}
+          <div className="flex items-center justify-between text-sm text-slate-600">
+            <span>Customer</span>
+            <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)} className="w-36 rounded border border-slate-200 px-2 py-1 text-xs">
+              <option value="">Walk-in</option>
+              {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
           </div>
           <div className="flex justify-between border-t border-slate-200 pt-2 text-lg font-bold text-slate-800">
             <span>Total</span>
