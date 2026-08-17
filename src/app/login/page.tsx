@@ -159,7 +159,17 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <div className="mt-6 text-center">
+        {/* Demo Mode */}
+        <div className="mt-4">
+          <a
+            href="/dashboard?demo=true"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+          >
+            🎮 Try Demo
+          </a>
+        </div>
+
+        <div className="mt-4 text-center">
           <p className="text-xs text-slate-500">Store Management System v1.0</p>
           <p className="mt-1 text-[10px] text-slate-600">
             Developed by {DEVELOPER.name} • {DEVELOPER.phone}

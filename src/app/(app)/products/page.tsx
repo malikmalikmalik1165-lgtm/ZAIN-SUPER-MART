@@ -25,6 +25,7 @@ import {
 } from "@/components/icons";
 import { BarcodeDisplay } from "@/components/barcode-display";
 import { BarcodeLabelPrint } from "@/components/barcode-label-print";
+import { BarcodeInput } from "@/components/barcode-input";
 import { ExcelImport } from "@/components/excel-import";
 import type {
   Product,
@@ -66,6 +67,7 @@ export default function ProductsPage() {
     category_id: "",
     unit: "piece",
     purchase_price: 0,
+    market_price: 0,
     sale_price: 0,
     stock_quantity: 0,
     minimum_stock: 0,
@@ -133,6 +135,7 @@ export default function ProductsPage() {
       category_id: "",
       unit: "piece",
       purchase_price: 0,
+    market_price: 0,
       sale_price: 0,
       stock_quantity: 0,
       minimum_stock: 0,
@@ -150,6 +153,7 @@ export default function ProductsPage() {
       category_id: product.category_id || "",
       unit: product.unit,
       purchase_price: product.purchase_price,
+      market_price: product.market_price || 0,
       sale_price: product.sale_price,
       stock_quantity: product.stock_quantity,
       minimum_stock: product.minimum_stock,
@@ -501,60 +505,25 @@ export default function ProductsPage() {
             required
           />
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">Barcode</label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Barcode className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={formData.barcode}
-                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                  placeholder="Scan, enter, or generate"
-                  className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-4 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                />
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                loading={generatingBarcode}
-                onClick={async () => {
-                  setGeneratingBarcode(true);
-                  try {
-                    const res = await fetch("/api/barcode/generate", { method: "POST" });
-                    const json = await res.json();
-                    if (res.ok && json.data?.barcode) {
-                      setFormData({ ...formData, barcode: json.data.barcode });
-                      showToast("success", "Barcode generated");
-                    } else {
-                      showToast("error", json.error || "Failed to generate");
-                    }
-                  } catch { showToast("error", "Failed to generate barcode"); }
-                  finally { setGeneratingBarcode(false); }
-                }}
-              >
-                Generate
-              </Button>
-              {formData.barcode && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setFormData({ ...formData, barcode: "" })}
-                  title="Clear barcode"
-                >
-                  ✕
-                </Button>
-              )}
-            </div>
-            {formData.barcode && (
-              <div className="flex justify-center rounded-lg border border-slate-200 bg-slate-50 p-2">
-                <BarcodeDisplay value={formData.barcode} height={40} width={1.5} />
-              </div>
-            )}
-            <p className="text-xs text-slate-500">Scan existing barcode, type manually, or generate internal barcode</p>
-          </div>
+          <BarcodeInput
+            value={formData.barcode}
+            onChange={(val) => setFormData({ ...formData, barcode: val })}
+            generating={generatingBarcode}
+            onGenerate={async () => {
+              setGeneratingBarcode(true);
+              try {
+                const res = await fetch("/api/barcode/generate", { method: "POST" });
+                const json = await res.json();
+                if (res.ok && json.data?.barcode) {
+                  setFormData({ ...formData, barcode: json.data.barcode });
+                  showToast("success", "Barcode generated");
+                } else {
+                  showToast("error", json.error || "Failed to generate");
+                }
+              } catch { showToast("error", "Failed to generate barcode"); }
+              finally { setGeneratingBarcode(false); }
+            }}
+          />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Select
@@ -573,22 +542,33 @@ export default function ProductsPage() {
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Input
-              label="Purchase Price (Rs.)"
+              label="Cost Price (Rs.)"
               type="number"
               min="0"
               step="0.01"
               value={formData.purchase_price}
               onChange={(e) => setFormData({ ...formData, purchase_price: parseFloat(e.target.value) || 0 })}
+              hint="What you paid"
             />
             <Input
-              label="Sale Price (Rs.)"
+              label="Market Price (Rs.)"
+              type="number"
+              min="0"
+              step="0.01"
+              value={formData.market_price}
+              onChange={(e) => setFormData({ ...formData, market_price: parseFloat(e.target.value) || 0 })}
+              hint="MRP/reference price"
+            />
+            <Input
+              label="ZSM Price (Rs.)"
               type="number"
               min="0"
               step="0.01"
               value={formData.sale_price}
               onChange={(e) => setFormData({ ...formData, sale_price: parseFloat(e.target.value) || 0 })}
+              hint="Your selling price"
             />
           </div>
 

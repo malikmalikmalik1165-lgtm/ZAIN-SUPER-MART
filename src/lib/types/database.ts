@@ -59,14 +59,14 @@ export interface Product {
   barcode: string | null;
   category_id: string | null;
   unit: ProductUnit;
-  purchase_price: number;
-  sale_price: number;
+  purchase_price: number;  // Cost Price
+  market_price: number;    // Market/MRP Price
+  sale_price: number;      // ZSM Selling Price
   stock_quantity: number;
   minimum_stock: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  // Joined fields
   category?: Category | null;
 }
 
@@ -76,6 +76,7 @@ export interface ProductFormData {
   category_id: string;
   unit: ProductUnit;
   purchase_price: number;
+  market_price: number;
   sale_price: number;
   stock_quantity: number;
   minimum_stock: number;

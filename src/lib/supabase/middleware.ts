@@ -124,7 +124,14 @@ export async function updateSession(request: NextRequest) {
     hasSupabaseSession = !!user;
   }
 
-  const isAuthenticated = hasZsmSession || hasSupabaseSession;
+  // Demo mode - allow access with ?demo=true parameter (read-only)
+  const isDemo = request.nextUrl.searchParams.get("demo") === "true" || request.cookies.get("zsm_demo")?.value === "true";
+  if (isDemo && !isPublicRoute) {
+    // Set demo cookie so subsequent requests don't need ?demo=true
+    supabaseResponse.cookies.set("zsm_demo", "true", { path: "/", maxAge: 3600, httpOnly: false });
+  }
+
+  const isAuthenticated = hasZsmSession || hasSupabaseSession || isDemo;
 
   if (!isAuthenticated && !isPublicRoute) {
     const url = request.nextUrl.clone();

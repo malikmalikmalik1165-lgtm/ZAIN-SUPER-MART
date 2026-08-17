@@ -60,6 +60,7 @@ export async function PUT(
       category_id,
       unit,
       purchase_price,
+      market_price,
       sale_price,
       stock_quantity,
       minimum_stock,
@@ -119,6 +120,7 @@ export async function PUT(
     if (category_id !== undefined) updateData.category_id = category_id || null;
     if (unit !== undefined) updateData.unit = unit;
     if (purchase_price !== undefined) updateData.purchase_price = purchase_price;
+    if (market_price !== undefined) updateData.market_price = market_price;
     if (sale_price !== undefined) updateData.sale_price = sale_price;
     if (stock_quantity !== undefined) updateData.stock_quantity = stock_quantity;
     if (minimum_stock !== undefined) updateData.minimum_stock = minimum_stock;
