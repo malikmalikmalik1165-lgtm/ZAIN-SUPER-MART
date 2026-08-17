@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { STORE } from "@/lib/constants";
+import { STORE, DEVELOPER } from "@/lib/constants";
 import {
   Lock,
   Eye,
@@ -159,9 +159,12 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="mt-6 text-center text-xs text-slate-500">
-          Store Management System v1.0
-        </p>
+        <div className="mt-6 text-center">
+          <p className="text-xs text-slate-500">Store Management System v1.0</p>
+          <p className="mt-1 text-[10px] text-slate-600">
+            Developed by {DEVELOPER.name} • {DEVELOPER.phone}
+          </p>
+        </div>
       </div>
     </div>
   );

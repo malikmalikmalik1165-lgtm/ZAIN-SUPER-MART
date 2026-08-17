@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { STORE, NAV_SECTIONS } from "@/lib/constants";
+import { STORE, NAV_SECTIONS, DEVELOPER } from "@/lib/constants";
 import { NetworkStatus } from "@/components/network-status";
 import {
   LayoutDashboard,
@@ -119,8 +119,14 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </nav>
 
         {/* Bottom section */}
-        <div className="border-t border-slate-700/50 px-4 py-3">
+        <div className="border-t border-slate-700/50 px-4 py-3 space-y-2">
           <NetworkStatus />
+          <div className="text-center pt-1">
+            <p className="text-[10px] text-slate-500">
+              Developed by {DEVELOPER.name}
+            </p>
+            <p className="text-[10px] text-slate-600">{DEVELOPER.phone}</p>
+          </div>
         </div>
       </aside>
     </>

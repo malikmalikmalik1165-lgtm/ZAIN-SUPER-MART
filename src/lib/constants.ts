@@ -1,8 +1,13 @@
 export const STORE = {
   name: "ZAIN SUPER MART",
-  phone: "03081553082",
+  phone: "03117054563",
   address: "Bhera–Malakwal Road, Miani",
   shortName: "ZSM",
+} as const;
+
+export const DEVELOPER = {
+  name: "Malik Danial",
+  phone: "03180283104",
 } as const;
 
 export const NAV_SECTIONS = [
