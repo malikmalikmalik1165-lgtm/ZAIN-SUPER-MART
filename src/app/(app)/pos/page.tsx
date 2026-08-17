@@ -524,116 +524,104 @@ export default function POSPage() {
       </Modal>
 
       {/* Receipt Modal */}
-      <Modal isOpen={showReceipt} onClose={newSale} title="Receipt" size="md">
+      <Modal isOpen={showReceipt} onClose={newSale} title="Receipt Preview" size="md">
         {completedSale && (
           <div>
-            <div id="receipt-content" className="space-y-4 text-sm">
-              <div className="text-center border-b border-dashed border-slate-300 pb-4">
-                <h3 className="text-lg font-bold text-slate-800">{STORE.name}</h3>
-                <p className="text-xs text-slate-500">{STORE.address}</p>
-                <p className="text-xs text-slate-500">Ph: {STORE.phone}</p>
-                <div className="mt-2 text-xs text-slate-500">
-                  <p>Invoice: <span className="font-semibold text-slate-700">{completedSale.sale_number}</span></p>
-                  <p>{new Date(completedSale.created_at).toLocaleString("en-PK")}</p>
-                </div>
+            {/* On-screen receipt preview styled like thermal slip */}
+            <div className="mx-auto max-w-[300px] bg-white border border-slate-200 rounded-lg p-4 font-mono text-xs leading-relaxed">
+              <div className="text-center border-b border-dashed border-slate-400 pb-2 mb-2">
+                <p className="text-sm font-black tracking-wide">{STORE.name}</p>
+                <p className="text-[10px] text-slate-500">{STORE.address}</p>
+                <p className="text-[10px] text-slate-500">Ph: {STORE.phone}</p>
               </div>
-
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs text-slate-500">
-                    <th className="py-1 text-left">Item</th>
-                    <th className="py-1 text-center">Qty</th>
-                    <th className="py-1 text-right">Price</th>
-                    <th className="py-1 text-right">Total</th>
-                  </tr>
-                </thead>
+              <div className="border-b border-dashed border-slate-400 pb-2 mb-2">
+                <p>Invoice: <b>{completedSale.sale_number}</b></p>
+                <p>Date: {new Date(completedSale.created_at).toLocaleString("en-PK")}</p>
+              </div>
+              <table className="w-full mb-2">
+                <thead><tr className="border-b border-slate-300"><th className="text-left py-0.5">ITEM</th><th className="text-right py-0.5">QTY</th><th className="text-right py-0.5">RATE</th><th className="text-right py-0.5">AMT</th></tr></thead>
                 <tbody>
-                  {completedSale.items?.map((item, idx) => (
-                    <tr key={idx} className="border-b border-slate-100">
-                      <td className="py-1.5 text-slate-700">{item.product_name}</td>
-                      <td className="py-1.5 text-center text-slate-600">{item.quantity}</td>
-                      <td className="py-1.5 text-right text-slate-600">{formatPrice(item.unit_price)}</td>
-                      <td className="py-1.5 text-right font-medium text-slate-800">{formatPrice(item.line_total)}</td>
+                  {completedSale.items?.map((it, i) => (
+                    <tr key={i} className="border-b border-dotted border-slate-200">
+                      <td className="py-0.5 max-w-[100px] truncate">{it.product_name}</td>
+                      <td className="text-right py-0.5">{it.quantity}</td>
+                      <td className="text-right py-0.5">{it.unit_price}</td>
+                      <td className="text-right py-0.5 font-bold">{it.line_total}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-
-              <div className="border-t border-dashed border-slate-300 pt-2 space-y-1">
-                <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span>{formatPrice(completedSale.subtotal)}</span></div>
-                {completedSale.discount > 0 && (
-                  <div className="flex justify-between"><span className="text-slate-500">Discount</span><span>-{formatPrice(completedSale.discount)}</span></div>
-                )}
-                <div className="flex justify-between text-base font-bold border-t pt-1">
-                  <span>Total</span><span className="text-emerald-700">{formatPrice(completedSale.total)}</span>
+              <div className="border-t border-dashed border-slate-400 pt-1 space-y-0.5">
+                <div className="flex justify-between"><span>Subtotal</span><span>Rs.{completedSale.subtotal}</span></div>
+                {completedSale.discount > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-Rs.{completedSale.discount}</span></div>}
+                <div className="flex justify-between font-black text-sm border-t border-double border-slate-400 pt-1 mt-1">
+                  <span>NET TOTAL</span><span>Rs.{completedSale.total}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Paid ({completedSale.payment_method})</span><span>{formatPrice(completedSale.amount_paid)}</span>
-                </div>
-                {completedSale.change_amount > 0 && (
-                  <div className="flex justify-between text-blue-600 font-medium">
-                    <span>Change</span><span>{formatPrice(completedSale.change_amount)}</span>
-                  </div>
-                )}
+                <div className="flex justify-between mt-1"><span>Method</span><span className="uppercase">{completedSale.payment_method}</span></div>
+                <div className="flex justify-between"><span>Paid</span><span>Rs.{completedSale.amount_paid}</span></div>
+                {completedSale.change_amount > 0 && <div className="flex justify-between font-bold"><span>Change</span><span>Rs.{completedSale.change_amount}</span></div>}
               </div>
-
-              <p className="text-center text-xs text-slate-400 pt-2 border-t border-dashed border-slate-300">
-                Thank you for shopping at {STORE.name}!
-              </p>
+              <div className="border-t border-dashed border-slate-400 mt-2 pt-2 text-center">
+                <p className="font-bold">Thank you for shopping!</p>
+                <p className="text-[9px] text-slate-400 mt-1">{STORE.name} | {STORE.address}</p>
+                <p className="text-[9px] text-slate-400">Owner: {STORE.phone}</p>
+                <p className="text-[9px] text-slate-400 mt-1">Developed by Malik Danial • 03180283104</p>
+              </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => {
-                  const rw = localStorage.getItem("zsm_receipt_width") || "58";
-                  const maxW = rw === "80" ? "72mm" : "48mm";
-                  const win = window.open("", "_blank");
-                  if (win) {
-                    win.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>
-@page{size:${rw}mm auto;margin:0}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Courier New',monospace;width:${maxW};margin:0 auto;padding:4mm 2mm;font-size:${rw==="80"?"12px":"10px"};color:#000}
+            <div className="flex gap-3 mt-4">
+              <Button variant="secondary" className="flex-1" onClick={() => {
+                const rw = localStorage.getItem("zsm_receipt_width") || "58";
+                const w = rw === "80" ? "72mm" : "48mm";
+                const fs = rw === "80" ? "11px" : "9px";
+                const hfs = rw === "80" ? "14px" : "12px";
+                const win = window.open("", "_blank");
+                if (!win) return;
+                win.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>
+@page{size:${rw}mm auto;margin:0}*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Courier New',Courier,monospace;width:${w};margin:0 auto;padding:3mm 1.5mm;font-size:${fs};color:#000;line-height:1.4}
 .c{text-align:center}.r{text-align:right}.b{font-weight:bold}
-.ln{border-top:1px dashed #000;margin:4px 0}
+.hd{font-size:${hfs};font-weight:900;letter-spacing:1px}
+.ln{border-top:1px dashed #000;margin:3px 0}
+.dln{border-top:2px double #000;margin:3px 0}
 table{width:100%;border-collapse:collapse}
-th,td{padding:2px 0;vertical-align:top}
-th{font-size:${rw==="80"?"10px":"9px"};text-align:left;border-bottom:1px solid #000}
-.sm{font-size:${rw==="80"?"10px":"8px"};color:#333}
-h2{font-size:${rw==="80"?"16px":"13px"};margin:2px 0}
-@media print{body{width:${maxW}}}
+th,td{padding:1px 0;vertical-align:top}
+th{text-align:left;border-bottom:1px solid #000;font-size:${rw==="80"?"9px":"8px"}}
+.total{font-size:${rw==="80"?"13px":"11px"};font-weight:900}
+.sm{font-size:${rw==="80"?"9px":"7px"};color:#444}
 </style></head><body>
-<div class="c"><h2>${STORE.name}</h2><p class="sm">${STORE.address}</p><p class="sm">Ph: ${STORE.phone}</p></div>
+<div class="c"><p class="hd">${STORE.name}</p><p class="sm">${STORE.address}</p><p class="sm">Ph: ${STORE.phone}</p></div>
 <div class="ln"></div>
-<p class="sm">Invoice: <b>${completedSale.sale_number}</b></p>
-<p class="sm">${new Date(completedSale.created_at).toLocaleString("en-PK")}</p>
+<p>Inv: <b>${completedSale.sale_number}</b></p>
+<p>${new Date(completedSale.created_at).toLocaleString("en-PK")}</p>
 <div class="ln"></div>
-<table><tr><th>Item</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amt</th></tr>`);
-                    completedSale.items?.forEach(it => {
-                      win.document.write(`<tr><td>${it.product_name}</td><td class="r">${it.quantity}</td><td class="r">${it.unit_price}</td><td class="r">${it.line_total}</td></tr>`);
-                    });
-                    win.document.write(`</table><div class="ln"></div>`);
-                    win.document.write(`<table><tr><td>Subtotal</td><td class="r">Rs.${completedSale.subtotal}</td></tr>`);
-                    if (completedSale.discount > 0) win.document.write(`<tr><td>Discount</td><td class="r">-Rs.${completedSale.discount}</td></tr>`);
-                    win.document.write(`<tr class="b"><td>TOTAL</td><td class="r">Rs.${completedSale.total}</td></tr>`);
-                    win.document.write(`<tr><td>Paid (${completedSale.payment_method})</td><td class="r">Rs.${completedSale.amount_paid}</td></tr>`);
-                    if (completedSale.change_amount > 0) win.document.write(`<tr><td>Change</td><td class="r">Rs.${completedSale.change_amount}</td></tr>`);
-                    win.document.write(`</table><div class="ln"></div>`);
-                    win.document.write(`<p class="c sm">Thank you for shopping!</p><p class="c sm">Developed by Malik Danial • 03180283104</p>`);
-                    win.document.write(`</body></html>`);
-                    win.document.close();
-                    setTimeout(() => win.print(), 300);
-                  }
-                }}
-              >
-                <Printer className="h-4 w-4" />
-                Print Receipt
+<table><tr><th>ITEM</th><th class="r">QTY</th><th class="r">RATE</th><th class="r">AMT</th></tr>`);
+                completedSale.items?.forEach(it => {
+                  win.document.write(`<tr><td>${it.product_name}</td><td class="r">${it.quantity}</td><td class="r">${it.unit_price}</td><td class="r">${it.line_total}</td></tr>`);
+                });
+                win.document.write(`</table><div class="ln"></div>
+<table>
+<tr><td>Subtotal</td><td class="r">Rs.${completedSale.subtotal}</td></tr>`);
+                if (completedSale.discount > 0) win.document.write(`<tr><td>Discount</td><td class="r">-Rs.${completedSale.discount}</td></tr>`);
+                win.document.write(`</table><div class="dln"></div>
+<p class="total c">NET TOTAL: Rs.${completedSale.total}</p>
+<div class="dln"></div>
+<table>
+<tr><td>Method</td><td class="r b">${completedSale.payment_method.toUpperCase()}</td></tr>
+<tr><td>Paid</td><td class="r">Rs.${completedSale.amount_paid}</td></tr>`);
+                if (completedSale.change_amount > 0) win.document.write(`<tr><td>Change</td><td class="r b">Rs.${completedSale.change_amount}</td></tr>`);
+                win.document.write(`</table><div class="ln"></div>
+<div class="c"><p class="b">Thank you for shopping!</p><p class="sm">Visit Again</p>
+<div class="ln"></div>
+<p class="sm">${STORE.name}</p><p class="sm">${STORE.address}</p><p class="sm">Owner: ${STORE.phone}</p>
+<p class="sm" style="margin-top:3px">Developed by Malik Danial</p><p class="sm">03180283104</p>
+</div></body></html>`);
+                win.document.close();
+                setTimeout(() => win.print(), 400);
+              }}>
+                <Printer className="h-4 w-4" />Print Receipt
               </Button>
-              <Button className="flex-1" onClick={newSale}>
-                <Plus className="h-4 w-4" />
-                New Sale
-              </Button>
+              <Button className="flex-1" onClick={newSale}><Plus className="h-4 w-4" />New Sale</Button>
             </div>
           </div>
         )}

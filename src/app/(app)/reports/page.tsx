@@ -112,8 +112,7 @@ th{background:#f8f8f8;font-weight:bold}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div><h1 className="text-2xl font-bold text-slate-800">Reports</h1><p className="mt-1 text-sm text-slate-500">Business overview & analytics</p></div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={downloadPDF}><FileText className="h-4 w-4" />📄 Download PDF</Button>
-          <Button variant="secondary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
+          <Button onClick={downloadPDF} className="bg-blue-600 hover:bg-blue-700"><FileText className="h-4 w-4" />📄 Download / Print Report</Button>
         </div>
       </div>
 
