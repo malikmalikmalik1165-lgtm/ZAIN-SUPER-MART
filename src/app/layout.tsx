@@ -33,6 +33,24 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.__zsmInstallPrompt = null;
+              window.__zsmAppInstalled = window.matchMedia('(display-mode: standalone)').matches;
+              window.addEventListener('beforeinstallprompt', function (event) {
+                event.preventDefault();
+                window.__zsmInstallPrompt = event;
+                window.dispatchEvent(new Event('zsm-install-ready'));
+              });
+              window.addEventListener('appinstalled', function () {
+                window.__zsmInstallPrompt = null;
+                window.__zsmAppInstalled = true;
+                window.dispatchEvent(new Event('zsm-app-installed'));
+              });
+            `,
+          }}
+        />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

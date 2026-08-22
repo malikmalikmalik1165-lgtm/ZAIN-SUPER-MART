@@ -1,17 +1,23 @@
 /**
- * ZAIN SUPER MART — Production Service Worker
- * Full offline-first PWA with app shell caching
+ * ZAIN SUPER MART — Offline-first Service Worker
+ * Supabase is authoritative; this worker caches the installed app shell and read data.
  */
 
-const CACHE_VERSION = "zsm-v4";
-const STATIC_CACHE = CACHE_VERSION + "-static";
-const DYNAMIC_CACHE = CACHE_VERSION + "-dynamic";
-const API_CACHE = CACHE_VERSION + "-api";
+const VERSION = "zsm-v5";
+const STATIC_CACHE = `${VERSION}-static`;
+const PAGE_CACHE = `${VERSION}-pages`;
+const DATA_CACHE = `${VERSION}-data`;
+const ASSET_CACHE = `${VERSION}-assets`;
 
-// Core app shell files to precache
-const APP_SHELL = [
-  "/",
+const PUBLIC_SHELL = [
   "/login",
+  "/offline",
+  "/manifest.json",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+];
+
+const AUTHENTICATED_SHELL = [
   "/dashboard",
   "/pos",
   "/products",
@@ -23,22 +29,17 @@ const APP_SHELL = [
   "/expenses",
   "/reports",
   "/settings",
-  "/manifest.json",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/offline",
 ];
 
-// Install: precache app shell
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then(async (cache) => {
-      // Cache each URL individually, skip failures
-      for (const url of APP_SHELL) {
+      for (const path of PUBLIC_SHELL) {
         try {
-          await cache.add(url);
-        } catch (e) {
-          console.warn("SW: Failed to cache", url, e);
+          const response = await fetch(path, { credentials: "include" });
+          if (response.ok) await cache.put(path, response);
+        } catch {
+          // One missing asset must not prevent service-worker installation.
         }
       }
     })
@@ -46,148 +47,144 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => !k.startsWith(CACHE_VERSION))
-          .map((k) => caches.delete(k))
-      )
-    )
+    Promise.all([
+      caches.keys().then((keys) =>
+        Promise.all(keys.filter((key) => !key.startsWith(VERSION)).map((key) => caches.delete(key)))
+      ),
+      self.clients.claim(),
+    ])
   );
-  self.clients.claim();
 });
 
-// Fetch strategy
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // Skip non-GET requests
-  if (request.method !== "GET") return;
-
-  // API requests: network-first with cache fallback (for offline product data)
-  if (url.pathname.startsWith("/api/")) {
-    // Cache GET API responses for offline use
-    if (
-      url.pathname.includes("/products") ||
-      url.pathname.includes("/categories") ||
-      url.pathname.includes("/customers") ||
-      url.pathname.includes("/stats")
-    ) {
-      event.respondWith(
-        fetch(request)
-          .then((response) => {
-            if (response.ok) {
-              const clone = response.clone();
-              caches.open(API_CACHE).then((cache) => cache.put(request, clone));
-            }
-            return response;
-          })
-          .catch(() => caches.match(request))
-      );
-      return;
+async function cacheAuthenticatedShell() {
+  const cache = await caches.open(PAGE_CACHE);
+  for (const path of AUTHENTICATED_SHELL) {
+    try {
+      const response = await fetch(path, {
+        credentials: "include",
+        redirect: "follow",
+        headers: { "X-ZSM-Cache-Warm": "1" },
+      });
+      // Never cache a response redirected to login under a protected page key.
+      if (response.ok && !response.url.includes("/login")) {
+        await cache.put(path, response.clone());
+      }
+    } catch {
+      // Existing cached shell remains available.
     }
-    // Other API calls: network only
+  }
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") {
+    self.skipWaiting();
     return;
   }
-
-  // Next.js static assets: cache-first
-  if (
-    url.pathname.startsWith("/_next/static/") ||
-    url.pathname.startsWith("/icons/") ||
-    url.pathname === "/manifest.json"
-  ) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((response) => {
-            if (response.ok) {
-              const clone = response.clone();
-              caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
-            }
-            return response;
-          })
-      )
-    );
-    return;
+  if (event.data?.type === "CACHE_AUTHENTICATED_SHELL") {
+    event.waitUntil(cacheAuthenticatedShell());
   }
-
-  // Next.js dynamic chunks: stale-while-revalidate
-  if (url.pathname.startsWith("/_next/")) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        const fetchPromise = fetch(request)
-          .then((response) => {
-            if (response.ok) {
-              const clone = response.clone();
-              caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
-            }
-            return response;
-          })
-          .catch(() => cached);
-        return cached || fetchPromise;
-      })
-    );
-    return;
-  }
-
-  // HTML pages: network-first, fallback to cache, then offline page
-  if (request.mode === "navigate" || request.headers.get("accept")?.includes("text/html")) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(STATIC_CACHE).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(async () => {
-          const cached = await caches.match(request);
-          if (cached) return cached;
-          // Fallback to offline page
-          const offline = await caches.match("/offline");
-          if (offline) return offline;
-          // Last resort: try dashboard
-          const dashboard = await caches.match("/dashboard");
-          return dashboard || new Response("Offline", { status: 503 });
-        })
-    );
-    return;
-  }
-
-  // Everything else: network with cache fallback
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(() => caches.match(request))
-  );
 });
 
-// Listen for sync events
 self.addEventListener("sync", (event) => {
   if (event.tag === "zsm-sync-sales") {
-    event.respondWith(
-      self.clients.matchAll().then((clients) => {
+    event.waitUntil(
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
         clients.forEach((client) => client.postMessage({ type: "SYNC_SALES" }));
       })
     );
   }
 });
 
-// Listen for messages
-self.addEventListener("message", (event) => {
-  if (event.data === "SKIP_WAITING") {
-    self.skipWaiting();
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.startsWith("/api/")) {
+    const cacheableRead = ["/api/products", "/api/categories", "/api/customers", "/api/stats"]
+      .some((prefix) => url.pathname.startsWith(prefix));
+    if (!cacheableRead) return;
+
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            caches.open(DATA_CACHE).then((cache) => cache.put(request, response.clone()));
+          }
+          return response;
+        })
+        .catch(async () =>
+          (await caches.match(request)) ||
+          new Response(JSON.stringify({ error: "Offline data is unavailable" }), {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+    );
+    return;
   }
+
+  if (
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/icons/") ||
+    url.pathname === "/manifest.json"
+  ) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) caches.open(ASSET_CACHE).then((cache) => cache.put(request, response.clone()));
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  if (url.pathname.startsWith("/_next/")) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const network = fetch(request)
+          .then((response) => {
+            if (response.ok) caches.open(ASSET_CACHE).then((cache) => cache.put(request, response.clone()));
+            return response;
+          })
+          .catch(() => cached);
+        return cached || network;
+      })
+    );
+    return;
+  }
+
+  if (request.mode === "navigate" || request.headers.get("accept")?.includes("text/html")) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok && !response.url.includes("/login")) {
+            caches.open(PAGE_CACHE).then((cache) => cache.put(url.pathname, response.clone()));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const exact = await caches.match(url.pathname);
+          if (exact) return exact;
+          const offline = await caches.match("/offline");
+          return offline || new Response("ZAIN SUPER MART is offline", { status: 503 });
+        })
+    );
+    return;
+  }
+
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response.ok) caches.open(ASSET_CACHE).then((cache) => cache.put(request, response.clone()));
+        return response;
+      })
+      .catch(() => caches.match(request))
+  );
 });

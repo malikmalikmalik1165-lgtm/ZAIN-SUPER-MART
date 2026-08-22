@@ -24,6 +24,24 @@ import {
 import type { Product, CartItem, PaymentMethod, Sale } from "@/lib/types/database";
 import { PAYMENT_METHODS } from "@/lib/types/database";
 import { BarcodeScanner } from "@/components/barcode-scanner";
+import { useOffline } from "@/lib/hooks/use-offline";
+import {
+  createPendingSaleWithStock,
+  listOfflineCategories,
+  listOfflineCustomers,
+  listOfflineProducts,
+  type OfflineProduct,
+} from "@/lib/offline/db";
+
+function offlineToProduct(product: OfflineProduct): Product {
+  return {
+    ...product,
+    unit: product.unit as Product["unit"],
+    created_at: "",
+    updated_at: "",
+    category: null,
+  };
+}
 
 export default function POSPage() {
   // Product search
@@ -52,6 +70,9 @@ export default function POSPage() {
   // Receipt
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [completedOffline, setCompletedOffline] = useState(false);
+
+  const { isOnline, refreshPending } = useOffline();
 
   // Barcode create product redirect
   const [pendingBarcode, setPendingBarcode] = useState<string | null>(null);
@@ -65,31 +86,71 @@ export default function POSPage() {
   const grandTotal = Math.max(0, subtotal - cartDiscount);
   const change = paymentMethod === "cash" ? Math.max(0, amountPaid - grandTotal) : 0;
 
-  // Fetch categories + customers on mount
+  // Fetch online data or fall back to the local operational cache.
   useEffect(() => {
-    fetch("/api/categories?active=true").then(r => r.json()).then(j => { if (j.data) setCategories(j.data); }).catch(() => {});
-    fetch("/api/customers").then(r => r.json()).then(j => { if (j.data) setCustomers(j.data); }).catch(() => {});
-  }, []);
+    const loadSupportingData = async () => {
+      if (navigator.onLine) {
+        try {
+          const [categoryRes, customerRes] = await Promise.all([
+            fetch("/api/categories?active=true"),
+            fetch("/api/customers"),
+          ]);
+          const [categoryJson, customerJson] = await Promise.all([
+            categoryRes.json(),
+            customerRes.json(),
+          ]);
+          if (categoryRes.ok) setCategories(categoryJson.data || []);
+          if (customerRes.ok) setCustomers(customerJson.data || []);
+          return;
+        } catch {
+          // Continue with local cache.
+        }
+      }
 
-  // Search products
+      const [localCategories, localCustomers] = await Promise.all([
+        listOfflineCategories(),
+        listOfflineCustomers(),
+      ]);
+      setCategories(localCategories.map((category) => ({ id: category.id, name: category.name })));
+      setCustomers(localCustomers);
+    };
+
+    loadSupportingData();
+  }, [isOnline]);
+
+  // Search Supabase while online; use the IndexedDB snapshot while offline.
   const searchProducts = useCallback(async () => {
     setSearchLoading(true);
     try {
+      if (!isOnline) {
+        const local = await listOfflineProducts(searchQuery, categoryFilter);
+        setSearchResults(local.slice(0, 50).map(offlineToProduct));
+        return;
+      }
+
       const params = new URLSearchParams();
       if (searchQuery) params.set("search", searchQuery);
       if (categoryFilter) params.set("category_id", categoryFilter);
       params.set("active", "true");
-      params.set("limit", "20");
+      params.set("limit", "50");
 
       const res = await fetch(`/api/products?${params}`);
+      if (!res.ok) throw new Error("Product request failed");
       const json = await res.json();
-      if (res.ok) setSearchResults(json.data || []);
+      setSearchResults(json.data || []);
     } catch {
-      showToast("error", "Failed to search products");
+      // A connection can disappear before navigator.onLine updates.
+      try {
+        const local = await listOfflineProducts(searchQuery, categoryFilter);
+        setSearchResults(local.slice(0, 50).map(offlineToProduct));
+        showToast("info", "Using cached offline products");
+      } catch {
+        showToast("error", "No cached products are available offline");
+      }
     } finally {
       setSearchLoading(false);
     }
-  }, [searchQuery, categoryFilter, showToast]);
+  }, [searchQuery, categoryFilter, showToast, isOnline]);
 
   useEffect(() => {
     const timer = setTimeout(searchProducts, 300);
@@ -201,24 +262,80 @@ export default function POSPage() {
         customer_id: selectedCustomer || null,
       };
 
-      const res = await fetch("/api/sales", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const completeOffline = async () => {
+        const createdAt = new Date().toISOString();
+        const clientId = await createPendingSaleWithStock({
+          ...payload,
+          created_at: createdAt,
+        });
 
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+        setCompletedSale({
+          id: clientId,
+          sale_number: `OFF-${Date.now().toString(36).toUpperCase()}`,
+          customer_id: payload.customer_id,
+          subtotal: payload.subtotal,
+          discount: payload.discount,
+          total: payload.total,
+          payment_method: payload.payment_method,
+          amount_paid: payload.amount_paid,
+          change_amount: payload.change_amount,
+          status: "completed",
+          notes: "Saved offline — waiting for synchronization",
+          created_at: createdAt,
+          created_by: null,
+          items: payload.items.map((item, index) => ({
+            id: `${clientId}-${index}`,
+            sale_id: clientId,
+            product_id: item.product_id,
+            product_name: item.product_name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            discount: item.discount,
+            line_total: item.line_total,
+            created_at: createdAt,
+          })),
+        });
+        setCompletedOffline(true);
+        await refreshPending();
+        setShowPayment(false);
+        setShowReceipt(true);
+        setCart([]);
+        setDiscountInput(0);
+        showToast("info", "Saved offline — waiting for sync");
+        await searchProducts();
+      };
 
-      setCompletedSale(json.data);
-      setShowPayment(false);
-      setShowReceipt(true);
-      setCart([]);
-      setDiscountInput(0);
-      showToast("success", "Sale completed successfully!");
+      if (!navigator.onLine) {
+        await completeOffline();
+      } else {
+        try {
+          const res = await fetch("/api/sales", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
-      // Refresh product search to update stock
-      searchProducts();
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || "Sale failed");
+
+          setCompletedSale(json.data);
+          setCompletedOffline(false);
+          setShowPayment(false);
+          setShowReceipt(true);
+          setCart([]);
+          setDiscountInput(0);
+          showToast("success", "Sale completed successfully!");
+          await searchProducts();
+        } catch (networkError) {
+          // Queue only when connectivity was actually lost, never on a server validation failure.
+          if (!navigator.onLine) {
+            await completeOffline();
+          } else {
+            throw networkError;
+          }
+        }
+      }
     } catch (error) {
       showToast("error", error instanceof Error ? error.message : "Sale failed");
     } finally {
@@ -230,6 +347,7 @@ export default function POSPage() {
   const newSale = () => {
     setShowReceipt(false);
     setCompletedSale(null);
+    setCompletedOffline(false);
     setSearchQuery("");
     searchRef.current?.focus();
   };
@@ -527,6 +645,11 @@ export default function POSPage() {
       <Modal isOpen={showReceipt} onClose={newSale} title="Receipt Preview" size="md">
         {completedSale && (
           <div>
+            {completedOffline && (
+              <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-800">
+                ⏳ Saved offline — waiting for sync
+              </div>
+            )}
             {/* On-screen receipt preview styled like thermal slip */}
             <div className="mx-auto max-w-[300px] bg-white border border-slate-200 rounded-lg p-4 font-mono text-xs leading-relaxed">
               <div className="text-center border-b border-dashed border-slate-400 pb-2 mb-2">

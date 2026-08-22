@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { BarcodeDisplay } from "@/components/barcode-display";
 import { CameraScanner } from "@/components/camera-scanner";
@@ -104,7 +105,15 @@ export function BarcodeInput({ value, onChange, onGenerate, generating, error, o
           </div>
           {externalImage && (
             <div className="mt-2 flex justify-center">
-              <img src={externalImage} alt="Product" className="h-20 w-20 rounded-lg object-contain border bg-white" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              <Image
+                src={externalImage}
+                alt="External product preview"
+                width={80}
+                height={80}
+                unoptimized
+                className="h-20 w-20 rounded-lg border bg-white object-contain"
+                onError={(event) => { event.currentTarget.style.display = "none"; }}
+              />
             </div>
           )}
         </div>

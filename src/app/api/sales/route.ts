@@ -69,6 +69,28 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { items, subtotal, discount, total, payment_method, amount_paid, change_amount, notes } = body;
+    const offlineClientId = typeof body.offline_client_id === "string"
+      ? body.offline_client_id.trim().slice(0, 100)
+      : null;
+
+    // Idempotency: an offline transaction already accepted must never deduct stock again.
+    if (offlineClientId) {
+      const { data: existing, error: idempotencyError } = await supabase
+        .from("sales")
+        .select("*, items:sale_items(*)")
+        .eq("offline_client_id", offlineClientId)
+        .maybeSingle();
+
+      if (idempotencyError?.code === "42703" || idempotencyError?.code === "PGRST204") {
+        return NextResponse.json(
+          { error: "Offline sync migration is required before pending sales can sync" },
+          { status: 503 }
+        );
+      }
+      if (existing) {
+        return NextResponse.json({ data: existing, duplicate: true });
+      }
+    }
 
     // === SERVER-SIDE VALIDATION ===
     const errors: string[] = [];
@@ -172,6 +194,7 @@ export async function POST(request: NextRequest) {
         change_amount: serverChange,
         status: "completed",
         notes: notes?.trim() || null,
+        offline_client_id: offlineClientId,
         created_by: user?.id || null,
       })
       .select()
@@ -192,7 +215,9 @@ export async function POST(request: NextRequest) {
             amount_paid: serverAmountPaid,
             change_amount: serverChange,
             status: "completed",
+            customer_id,
             notes: notes?.trim() || null,
+            offline_client_id: offlineClientId,
             created_by: user?.id || null,
           })
           .select()

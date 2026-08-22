@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { X } from "@/components/icons";
 
@@ -9,33 +9,144 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-// Bottom banner prompt (auto-shows when browser supports install)
-export function PwaInstallBanner() {
+declare global {
+  interface Window {
+    __zsmInstallPrompt?: BeforeInstallPromptEvent | null;
+    __zsmAppInstalled?: boolean;
+  }
+}
+
+type InstallState = "checking" | "ready" | "installing" | "installed" | "unavailable";
+
+function isStandalone() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.__zsmAppInstalled === true ||
+    ("standalone" in navigator && (navigator as Navigator & { standalone?: boolean }).standalone === true)
+  );
+}
+
+function useNativeInstall() {
   const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [state, setState] = useState<InstallState>("checking");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const refresh = () => {
+      if (isStandalone()) {
+        setState("installed");
+        setPrompt(null);
+        return;
+      }
+      const captured = window.__zsmInstallPrompt ?? null;
+      setPrompt(captured);
+      setState(captured ? "ready" : "unavailable");
+    };
+
+    const installed = () => {
+      setState("installed");
+      setPrompt(null);
+      setMessage("ZAIN SUPER MART installed successfully.");
+    };
+
+    window.addEventListener("zsm-install-ready", refresh);
+    window.addEventListener("zsm-app-installed", installed);
+    window.addEventListener("beforeinstallprompt", refresh);
+    window.addEventListener("appinstalled", installed);
+
+    const frame = requestAnimationFrame(refresh);
+    // Chromium may emit installability after service-worker control is established.
+    const retry = window.setTimeout(refresh, 1500);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(retry);
+      window.removeEventListener("zsm-install-ready", refresh);
+      window.removeEventListener("zsm-app-installed", installed);
+      window.removeEventListener("beforeinstallprompt", refresh);
+      window.removeEventListener("appinstalled", installed);
+    };
+  }, []);
+
+  const install = useCallback(async () => {
+    if (isStandalone()) {
+      setState("installed");
+      setMessage("ZAIN SUPER MART is already installed.");
+      return;
+    }
+
+    const activePrompt = prompt ?? window.__zsmInstallPrompt ?? null;
+    if (!activePrompt) {
+      setState("unavailable");
+      setMessage(
+        /iPhone|iPad|iPod/i.test(navigator.userAgent)
+          ? "iPhone Safari does not allow one-tap web app installation. Use Safari Share → Add to Home Screen."
+          : "Native install is not available yet. Open this HTTPS site in Chrome or Edge and try again after the page finishes loading."
+      );
+      return;
+    }
+
+    setState("installing");
+    setMessage("");
+    try {
+      // Must run directly from this user click; browser shows its mandatory confirmation.
+      await activePrompt.prompt();
+      const choice = await activePrompt.userChoice;
+      window.__zsmInstallPrompt = null;
+      setPrompt(null);
+      if (choice.outcome === "accepted") {
+        setState("installed");
+        setMessage("Installation accepted. ZSM will open as an app.");
+      } else {
+        setState("unavailable");
+        setMessage("Installation was cancelled. Tap Install App to try again when Chrome/Edge offers it.");
+      }
+    } catch {
+      setState("unavailable");
+      setMessage("The browser could not start installation. Confirm you are using HTTPS in Chrome or Edge.");
+    }
+  }, [prompt]);
+
+  return { state, message, install };
+}
+
+export function PwaInstallBanner() {
+  const { state, install } = useNativeInstall();
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const handler = (e: Event) => { e.preventDefault(); setPrompt(e as BeforeInstallPromptEvent); };
-    window.addEventListener("beforeinstallprompt", handler);
-    const d = localStorage.getItem("zsm_pwa_dismissed");
-    if (d && Date.now() - parseInt(d) < 86400000) setDismissed(true);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
+    const dismissedAt = localStorage.getItem("zsm_pwa_dismissed");
+    const frame = requestAnimationFrame(() => {
+      if (dismissedAt && Date.now() - Number(dismissedAt) < 86400000) setDismissed(true);
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
-  if (!prompt || dismissed) return null;
+  if (state !== "ready" || dismissed) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-sm animate-in slide-in-from-bottom">
+    <div className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-sm">
       <div className="flex items-center gap-3 rounded-xl bg-emerald-600 p-4 text-white shadow-lg">
         <div className="flex-1">
-          <p className="text-sm font-semibold">📱 Install ZAIN SUPER MART</p>
-          <p className="text-xs text-emerald-100">Add to home screen for quick access</p>
+          <p className="text-sm font-semibold">Install ZAIN SUPER MART</p>
+          <p className="text-xs text-emerald-100">Opens as a standalone mobile/laptop app</p>
         </div>
-        <Button variant="secondary" size="sm" className="bg-white text-emerald-700 hover:bg-emerald-50"
-          onClick={async () => { await prompt.prompt(); const c = await prompt.userChoice; if (c.outcome === "accepted") setPrompt(null); }}>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="bg-white text-emerald-700 hover:bg-emerald-50"
+          onClick={install}
+        >
           Install
         </Button>
-        <button onClick={() => { setDismissed(true); localStorage.setItem("zsm_pwa_dismissed", String(Date.now())); }} className="text-emerald-200 hover:text-white">
+        <button
+          aria-label="Dismiss install prompt"
+          onClick={() => {
+            setDismissed(true);
+            localStorage.setItem("zsm_pwa_dismissed", String(Date.now()));
+          }}
+          className="text-emerald-200 hover:text-white"
+        >
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -43,91 +154,40 @@ export function PwaInstallBanner() {
   );
 }
 
-// Sidebar install button (always visible with instructions)
 export function PwaInstallButton() {
-  const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [installed, setInstalled] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
+  const { state, message, install } = useNativeInstall();
 
-  useEffect(() => {
-    const handler = (e: Event) => { e.preventDefault(); setPrompt(e as BeforeInstallPromptEvent); };
-    window.addEventListener("beforeinstallprompt", handler);
-
-    // Check if already installed
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      setInstalled(true);
-    }
-
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  if (installed) {
+  if (state === "installed") {
     return (
       <div className="rounded-lg bg-emerald-900/50 px-3 py-2 text-center">
-        <p className="text-[10px] text-emerald-400">✅ App Installed</p>
+        <p className="text-[11px] font-medium text-emerald-300">App Installed</p>
+        {message && <p className="mt-0.5 text-[9px] text-emerald-400">{message}</p>}
       </div>
     );
   }
 
-  const handleInstall = async () => {
-    if (prompt) {
-      await prompt.prompt();
-      const choice = await prompt.userChoice;
-      if (choice.outcome === "accepted") {
-        setInstalled(true);
-        setPrompt(null);
-      }
-    } else {
-      setShowHelp(true);
-    }
-  };
-
   return (
-    <>
+    <div className="space-y-1.5">
       <button
-        onClick={handleInstall}
-        className="w-full rounded-lg bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-600 transition-colors"
+        type="button"
+        onClick={install}
+        disabled={state === "installing"}
+        className="w-full rounded-lg bg-emerald-700 px-3 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 disabled:cursor-wait disabled:opacity-70"
       >
-        {prompt ? "📱 Install App" : "📱 Install ZAIN SUPER MART"}
+        {state === "installing"
+          ? "Starting installation..."
+          : state === "ready"
+            ? "Install App"
+            : "Install ZAIN SUPER MART"}
       </button>
-
-      {showHelp && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowHelp(false)}>
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-800 mb-3">📱 Install ZAIN SUPER MART</h3>
-
-            <div className="space-y-4 text-sm text-slate-600">
-              <div className="rounded-lg bg-blue-50 p-3">
-                <p className="font-semibold text-blue-800 mb-1">Chrome / Edge (Android & Laptop)</p>
-                <ol className="list-decimal pl-4 space-y-1 text-blue-700">
-                  <li>Tap the <b>⋮</b> menu (3 dots) in browser</li>
-                  <li>Tap <b>&quot;Install App&quot;</b> or <b>&quot;Add to Home Screen&quot;</b></li>
-                  <li>Confirm installation</li>
-                </ol>
-              </div>
-
-              <div className="rounded-lg bg-slate-50 p-3">
-                <p className="font-semibold text-slate-800 mb-1">iPhone / iPad (Safari)</p>
-                <ol className="list-decimal pl-4 space-y-1 text-slate-600">
-                  <li>Tap the <b>Share</b> button (square with arrow)</li>
-                  <li>Scroll down and tap <b>&quot;Add to Home Screen&quot;</b></li>
-                  <li>Tap <b>&quot;Add&quot;</b></li>
-                </ol>
-              </div>
-
-              <div className="rounded-lg bg-emerald-50 p-3">
-                <p className="font-semibold text-emerald-800 mb-1">Windows (Chrome/Edge)</p>
-                <ol className="list-decimal pl-4 space-y-1 text-emerald-700">
-                  <li>Click the <b>install icon</b> (⊕) in the address bar</li>
-                  <li>Or click <b>⋮ Menu → Install ZAIN SUPER MART</b></li>
-                </ol>
-              </div>
-            </div>
-
-            <Button className="w-full mt-4" onClick={() => setShowHelp(false)}>Got it</Button>
-          </div>
-        </div>
+      {message && (
+        <p className="rounded-md bg-slate-800 px-2 py-1.5 text-[9px] leading-relaxed text-slate-300">
+          {message}
+        </p>
       )}
-    </>
+      {state === "checking" && (
+        <p className="text-center text-[9px] text-slate-500">Checking install availability...</p>
+      )}
+    </div>
   );
 }

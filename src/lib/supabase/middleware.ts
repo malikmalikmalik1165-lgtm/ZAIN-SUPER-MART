@@ -69,6 +69,7 @@ export async function updateSession(request: NextRequest) {
   // Public routes
   const publicRoutes = [
     "/login",
+    "/offline",
     "/api/health",
     "/api/auth/login",
     "/api/auth/logout",
@@ -134,6 +135,9 @@ export async function updateSession(request: NextRequest) {
   const isAuthenticated = hasZsmSession || hasSupabaseSession || isDemo;
 
   if (!isAuthenticated && !isPublicRoute) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

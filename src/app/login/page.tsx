@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { STORE, DEVELOPER } from "@/lib/constants";
+import { PwaInstallButton } from "@/components/pwa-install";
 import {
   Lock,
   Eye,
@@ -41,7 +42,13 @@ export default function LoginPage() {
         return;
       }
 
-      // Full page navigation ensures the new cookie is sent with the request
+      // Store only non-sensitive display metadata for an already-installed offline shell.
+      localStorage.setItem(
+        "zsm_offline_user",
+        JSON.stringify({ username, role: "admin", expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 })
+      );
+
+      // Full page navigation ensures the new HttpOnly cookie is sent.
       window.location.href = "/dashboard";
     } catch {
       setError("An unexpected error occurred. Please try again.");
@@ -159,8 +166,12 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Demo Mode */}
         <div className="mt-4">
+          <PwaInstallButton />
+        </div>
+
+        {/* Demo Mode */}
+        <div className="mt-3">
           <a
             href="/dashboard?demo=true"
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"

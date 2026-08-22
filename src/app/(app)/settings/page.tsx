@@ -10,7 +10,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const saved = localStorage.getItem("zsm_receipt_width");
-    if (saved) setReceiptWidth(saved);
+    if (!saved) return;
+    const frame = requestAnimationFrame(() => setReceiptWidth(saved));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const saveReceiptWidth = (w: string) => {

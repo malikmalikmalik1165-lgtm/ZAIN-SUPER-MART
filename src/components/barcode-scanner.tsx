@@ -5,6 +5,17 @@ import { Button } from "@/components/ui/button";
 import { CameraScanner } from "@/components/camera-scanner";
 import { Barcode, Search, Plus, AlertCircle, Loader2 } from "@/components/icons";
 import type { Product } from "@/lib/types/database";
+import { findProductByBarcode, type OfflineProduct } from "@/lib/offline/db";
+
+function offlineToProduct(product: OfflineProduct): Product {
+  return {
+    ...product,
+    unit: product.unit as Product["unit"],
+    created_at: "",
+    updated_at: "",
+    category: null,
+  };
+}
 
 interface BarcodeScannerProps {
   onProductFound: (product: Product) => void;
@@ -20,24 +31,50 @@ export function BarcodeScanner({ onProductFound, onCreateProduct }: BarcodeScann
   const inputRef = useRef<HTMLInputElement>(null);
 
   const lookupBarcode = useCallback(async (barcode: string) => {
-    if (!barcode.trim()) return;
-    setScanning(true); setNotFound(null); setError(null);
-    try {
-      const res = await fetch(`/api/barcode/lookup?barcode=${encodeURIComponent(barcode.trim())}`);
-      const json = await res.json();
-      if (!res.ok) { setError(json.error || "Lookup failed"); return; }
+    const clean = barcode.trim();
+    if (!clean) return;
+    setScanning(true);
+    setNotFound(null);
+    setError(null);
 
-      // POS only cares about ZSM products (source === "zsm")
+    try {
+      if (!navigator.onLine) {
+        const cached = await findProductByBarcode(clean);
+        if (cached?.is_active) {
+          onProductFound(offlineToProduct(cached));
+          setScanInput("");
+        } else {
+          setError("Product unavailable offline. Reconnect or enter product details when online.");
+          setNotFound(clean);
+        }
+        return;
+      }
+
+      const res = await fetch(`/api/barcode/lookup?barcode=${encodeURIComponent(clean)}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Lookup failed");
+
       if (json.found && json.source === "zsm" && json.data) {
         if (!json.data.is_active) { setError(`${json.data.name} is inactive`); return; }
         onProductFound(json.data);
-        setScanInput(""); setNotFound(null);
+        setScanInput("");
       } else {
-        // Product not in ZSM (may be external or not found at all)
-        setNotFound(barcode.trim());
+        setNotFound(clean);
       }
-    } catch { setError("Failed to look up barcode"); }
-    finally { setScanning(false); inputRef.current?.focus(); }
+    } catch {
+      // Last-chance local lookup if the request failed during a connection change.
+      const cached = await findProductByBarcode(clean).catch(() => undefined);
+      if (cached?.is_active) {
+        onProductFound(offlineToProduct(cached));
+        setScanInput("");
+      } else {
+        setError("Product lookup failed. Manual entry remains available.");
+        setNotFound(clean);
+      }
+    } finally {
+      setScanning(false);
+      inputRef.current?.focus();
+    }
   }, [onProductFound]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

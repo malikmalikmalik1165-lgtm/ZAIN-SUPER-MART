@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { preCacheData } from "@/lib/offline/cache-manager";
@@ -9,26 +10,48 @@ interface AppShellProps {
   children: ReactNode;
 }
 
+const OFFLINE_READY_ROUTES = [
+  "/dashboard",
+  "/pos",
+  "/products",
+  "/categories",
+  "/inventory",
+  "/customers",
+  "/suppliers",
+  "/purchases",
+  "/expenses",
+  "/reports",
+  "/settings",
+];
+
 export function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const router = useRouter();
 
-  // Pre-cache data for offline use when app loads
   useEffect(() => {
-    // Initial cache after a short delay
-    const timer = setTimeout(() => {
-      preCacheData();
-    }, 3000);
+    const warmOfflineApp = async () => {
+      if (!navigator.onLine) return;
 
-    // Refresh cache every 10 minutes while online
-    const interval = setInterval(() => {
-      if (navigator.onLine) preCacheData();
+      // Ask Next to load route payloads/chunks; SW captures them as they load.
+      OFFLINE_READY_ROUTES.forEach((route) => router.prefetch(route));
+
+      try {
+        await preCacheData();
+      } catch (error) {
+        console.warn("[ZSM Offline] Warm-up failed:", error);
+      }
+    };
+
+    const timer = window.setTimeout(warmOfflineApp, 2000);
+    const interval = window.setInterval(() => {
+      if (navigator.onLine) preCacheData().catch(() => undefined);
     }, 10 * 60 * 1000);
 
     return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
     };
-  }, []);
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-slate-50">
